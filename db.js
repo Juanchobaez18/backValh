@@ -30,7 +30,12 @@ export async function initDb() {
       surgeries TEXT,
       medical_conditions TEXT,
       emergency_contact TEXT,
-      birth_date TEXT
+      birth_date TEXT,
+      membership_plan_id TEXT,
+      membership_start_date TEXT,
+      membership_end_date TEXT,
+      membership_status TEXT DEFAULT 'none',
+      avatar TEXT
     );
 
     CREATE TABLE IF NOT EXISTS products (
@@ -111,6 +116,26 @@ export async function initDb() {
       daily_protein INTEGER,
       notes TEXT
     );
+
+    CREATE TABLE IF NOT EXISTS payments (
+      id TEXT PRIMARY KEY,
+      user_id TEXT,
+      username TEXT,
+      plan_id TEXT,
+      plan_name TEXT,
+      amount REAL,
+      payment_date TEXT,
+      notes TEXT
+    );
+
+    CREATE TABLE IF NOT EXISTS notifications (
+      id TEXT PRIMARY KEY,
+      user_id TEXT,
+      message TEXT,
+      type TEXT,
+      date TEXT,
+      is_read INTEGER DEFAULT 0
+    );
   `);
 
   // Migrate existing measurements table: add new columns if they don't exist yet
@@ -130,14 +155,18 @@ export async function initDb() {
     try { await db.run(sql); } catch (_) { /* column already exists */ }
   }
 
-  // Migrate existing users table: add medical columns
+  // Migrate existing users table: add medical and membership columns
   const usersNewCols = [
     'ALTER TABLE users ADD COLUMN phone TEXT',
     'ALTER TABLE users ADD COLUMN surgeries TEXT',
     'ALTER TABLE users ADD COLUMN medical_conditions TEXT',
     'ALTER TABLE users ADD COLUMN emergency_contact TEXT',
     'ALTER TABLE users ADD COLUMN birth_date TEXT',
-    'ALTER TABLE users ADD COLUMN avatar TEXT'
+    'ALTER TABLE users ADD COLUMN avatar TEXT',
+    'ALTER TABLE users ADD COLUMN membership_plan_id TEXT',
+    'ALTER TABLE users ADD COLUMN membership_start_date TEXT',
+    'ALTER TABLE users ADD COLUMN membership_end_date TEXT',
+    'ALTER TABLE users ADD COLUMN membership_status TEXT DEFAULT \'none\''
   ];
   for (const sql of usersNewCols) {
     try { await db.run(sql); } catch (_) { /* column already exists */ }

@@ -89,7 +89,11 @@ app.post('/api/auth/login', async (req, res) => {
       surgeries: user.surgeries,
       medical_conditions: user.medical_conditions,
       emergency_contact: user.emergency_contact,
-      birth_date: user.birth_date
+      birth_date: user.birth_date,
+      membership_plan_id: user.membership_plan_id,
+      membership_start_date: user.membership_start_date,
+      membership_end_date: user.membership_end_date,
+      membership_status: user.membership_status
     };
     const token = jwt.sign({ id: user.id, username: user.username, role: user.role }, JWT_SECRET, { expiresIn: '24h' });
 
@@ -104,7 +108,7 @@ app.post('/api/auth/login', async (req, res) => {
 app.get('/api/auth/me', authenticateToken, async (req, res) => {
   try {
     const db = await getDbConnection();
-    const user = await db.get('SELECT id, username, role, phone, surgeries, medical_conditions, emergency_contact, birth_date, avatar FROM users WHERE id = ?', [req.user.id]);
+    const user = await db.get('SELECT id, username, role, phone, surgeries, medical_conditions, emergency_contact, birth_date, avatar, membership_plan_id, membership_start_date, membership_end_date, membership_status FROM users WHERE id = ?', [req.user.id]);
     await db.close();
     if (!user) return res.status(404).json({ error: 'Usuario no encontrado' });
     res.json({ user });
@@ -119,7 +123,7 @@ app.put('/api/auth/me', authenticateToken, async (req, res) => {
   try {
     const db = await getDbConnection();
     await db.run('UPDATE users SET avatar = ? WHERE id = ?', [avatar || null, req.user.id]);
-    const user = await db.get('SELECT id, username, role, phone, surgeries, medical_conditions, emergency_contact, birth_date, avatar FROM users WHERE id = ?', [req.user.id]);
+    const user = await db.get('SELECT id, username, role, phone, surgeries, medical_conditions, emergency_contact, birth_date, avatar, membership_plan_id, membership_start_date, membership_end_date, membership_status FROM users WHERE id = ?', [req.user.id]);
     await db.close();
     res.json({ user });
   } catch (err) {
@@ -134,7 +138,7 @@ app.put('/api/auth/me', authenticateToken, async (req, res) => {
 app.get('/api/admin/users', requireAdmin, async (req, res) => {
   try {
     const db = await getDbConnection();
-    const rows = await db.all('SELECT id, username, role, phone, surgeries, medical_conditions, emergency_contact, birth_date FROM users ORDER BY role DESC, username ASC');
+    const rows = await db.all('SELECT id, username, role, phone, surgeries, medical_conditions, emergency_contact, birth_date, membership_plan_id, membership_start_date, membership_end_date, membership_status FROM users ORDER BY role DESC, username ASC');
     await db.close();
     res.json(rows);
   } catch (err) {
@@ -144,7 +148,7 @@ app.get('/api/admin/users', requireAdmin, async (req, res) => {
 
 // Create user (Admin-only)
 app.post('/api/admin/users', requireAdmin, async (req, res) => {
-  const { username, password, role, phone, surgeries, medical_conditions, emergency_contact, birth_date } = req.body;
+  const { username, password, role, phone, surgeries, medical_conditions, emergency_contact, birth_date, membership_plan_id, membership_start_date, membership_end_date, membership_status } = req.body;
   if (!username || !password) {
     return res.status(400).json({ error: 'Nombre de usuario y contraseña son requeridos' });
   }
@@ -162,12 +166,12 @@ app.post('/api/admin/users', requireAdmin, async (req, res) => {
     const assignedRole = role === 'admin' ? 'admin' : 'user';
 
     await db.run(
-      'INSERT INTO users (id, username, password_hash, role, phone, surgeries, medical_conditions, emergency_contact, birth_date) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)',
-      [id, username, passwordHash, assignedRole, phone || null, surgeries || null, medical_conditions || null, emergency_contact || null, birth_date || null]
+      'INSERT INTO users (id, username, password_hash, role, phone, surgeries, medical_conditions, emergency_contact, birth_date, membership_plan_id, membership_start_date, membership_end_date, membership_status) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
+      [id, username, passwordHash, assignedRole, phone || null, surgeries || null, medical_conditions || null, emergency_contact || null, birth_date || null, membership_plan_id || null, membership_start_date || null, membership_end_date || null, membership_status || 'none']
     );
 
     await db.close();
-    res.status(201).json({ id, username, role: assignedRole });
+    res.status(201).json({ id, username, role: assignedRole, membership_plan_id, membership_start_date, membership_end_date, membership_status });
   } catch (err) {
     res.status(500).json({ error: 'Error al crear usuario', details: err.message });
   }
@@ -176,7 +180,7 @@ app.post('/api/admin/users', requireAdmin, async (req, res) => {
 // Edit user (Admin-only)
 app.put('/api/admin/users/:id', requireAdmin, async (req, res) => {
   const { id } = req.params;
-  const { username, password, role, phone, surgeries, medical_conditions, emergency_contact, birth_date } = req.body;
+  const { username, password, role, phone, surgeries, medical_conditions, emergency_contact, birth_date, membership_plan_id, membership_start_date, membership_end_date, membership_status } = req.body;
   
   if (!username) {
     return res.status(400).json({ error: 'Nombre de usuario es requerido' });
@@ -193,13 +197,13 @@ app.put('/api/admin/users/:id', requireAdmin, async (req, res) => {
     }
 
     const assignedRole = role === 'admin' ? 'admin' : 'user';
-    let query = 'UPDATE users SET username = ?, role = ?, phone = ?, surgeries = ?, medical_conditions = ?, emergency_contact = ?, birth_date = ? WHERE id = ?';
-    let params = [username, assignedRole, phone || null, surgeries || null, medical_conditions || null, emergency_contact || null, birth_date || null, id];
+    let query = 'UPDATE users SET username = ?, role = ?, phone = ?, surgeries = ?, medical_conditions = ?, emergency_contact = ?, birth_date = ?, membership_plan_id = ?, membership_start_date = ?, membership_end_date = ?, membership_status = ? WHERE id = ?';
+    let params = [username, assignedRole, phone || null, surgeries || null, medical_conditions || null, emergency_contact || null, birth_date || null, membership_plan_id || null, membership_start_date || null, membership_end_date || null, membership_status || 'none', id];
 
     if (password && password.trim() !== '') {
       const passwordHash = bcrypt.hashSync(password, 10);
-      query = 'UPDATE users SET username = ?, password_hash = ?, role = ?, phone = ?, surgeries = ?, medical_conditions = ?, emergency_contact = ?, birth_date = ? WHERE id = ?';
-      params = [username, passwordHash, assignedRole, phone || null, surgeries || null, medical_conditions || null, emergency_contact || null, birth_date || null, id];
+      query = 'UPDATE users SET username = ?, password_hash = ?, role = ?, phone = ?, surgeries = ?, medical_conditions = ?, emergency_contact = ?, birth_date = ?, membership_plan_id = ?, membership_start_date = ?, membership_end_date = ?, membership_status = ? WHERE id = ?';
+      params = [username, passwordHash, assignedRole, phone || null, surgeries || null, medical_conditions || null, emergency_contact || null, birth_date || null, membership_plan_id || null, membership_start_date || null, membership_end_date || null, membership_status || 'none', id];
     }
 
     const result = await db.run(query, params);
@@ -208,7 +212,7 @@ app.put('/api/admin/users/:id', requireAdmin, async (req, res) => {
     if (result.changes === 0) return res.status(404).json({ error: 'Usuario no encontrado' });
     
     // Return updated user data (without password)
-    res.json({ id, username, role: assignedRole, phone, surgeries, medical_conditions, emergency_contact, birth_date });
+    res.json({ id, username, role: assignedRole, phone, surgeries, medical_conditions, emergency_contact, birth_date, membership_plan_id, membership_start_date, membership_end_date, membership_status });
   } catch (err) {
     res.status(500).json({ error: 'Error al actualizar usuario', details: err.message });
   }
@@ -703,6 +707,166 @@ app.delete('/api/orders/:id', requireAdmin, async (req, res) => {
     res.status(500).json({ error: 'Error al eliminar orden', details: err.message });
   }
 });
+
+// --- PAYMENTS & FINANCE ROUTES ---
+
+// List all payments (Admin-only)
+app.get('/api/admin/payments', requireAdmin, async (req, res) => {
+  try {
+    const db = await getDbConnection();
+    const rows = await db.all('SELECT * FROM payments ORDER BY payment_date DESC');
+    await db.close();
+    res.json(rows);
+  } catch (err) {
+    res.status(500).json({ error: 'Error al obtener pagos', details: err.message });
+  }
+});
+
+// Register payment and update user membership (Admin-only)
+app.post('/api/admin/payments', requireAdmin, async (req, res) => {
+  const { user_id, username, plan_id, plan_name, amount, payment_date, notes } = req.body;
+  if (!user_id || !username || !amount || !payment_date) {
+    return res.status(400).json({ error: 'Faltan datos obligatorios para registrar el pago' });
+  }
+
+  try {
+    const db = await getDbConnection();
+    const id = `pay-${Date.now()}`;
+    
+    // Calculate membership end date (+30 days from payment_date)
+    const start = new Date(payment_date);
+    const end = new Date(start.getTime() + (30 * 24 * 60 * 60 * 1000));
+    const endStr = end.toISOString().split('T')[0];
+
+    // Insert payment record
+    await db.run(
+      'INSERT INTO payments (id, user_id, username, plan_id, plan_name, amount, payment_date, notes) VALUES (?, ?, ?, ?, ?, ?, ?, ?)',
+      [id, user_id, username, plan_id || null, plan_name || 'Membresía', parseFloat(amount), payment_date, notes || '']
+    );
+
+    // Update user membership details
+    await db.run(
+      'UPDATE users SET membership_plan_id = ?, membership_start_date = ?, membership_end_date = ?, membership_status = ? WHERE id = ?',
+      [plan_id || null, payment_date, endStr, 'active', user_id]
+    );
+
+    await db.close();
+    res.status(201).json({ id, user_id, username, plan_id, plan_name, amount: parseFloat(amount), payment_date, notes, membership_end_date: endStr });
+  } catch (err) {
+    res.status(500).json({ error: 'Error al registrar el pago', details: err.message });
+  }
+});
+
+// Delete payment record (Admin-only)
+app.delete('/api/admin/payments/:id', requireAdmin, async (req, res) => {
+  const { id } = req.params;
+  try {
+    const db = await getDbConnection();
+    const result = await db.run('DELETE FROM payments WHERE id = ?', [id]);
+    await db.close();
+    if (result.changes === 0) return res.status(404).json({ error: 'Pago no encontrado' });
+    res.json({ success: true, message: 'Registro de pago eliminado' });
+  } catch (err) {
+    res.status(500).json({ error: 'Error al eliminar pago', details: err.message });
+  }
+});
+
+
+// --- USER NOTIFICATIONS ROUTES ---
+
+// Get current user notifications
+app.get('/api/notifications/my', authenticateToken, async (req, res) => {
+  try {
+    const db = await getDbConnection();
+    const rows = await db.all('SELECT * FROM notifications WHERE user_id = ? ORDER BY date DESC LIMIT 50', [req.user.id]);
+    await db.close();
+    res.json(rows);
+  } catch (err) {
+    res.status(500).json({ error: 'Error al obtener notificaciones', details: err.message });
+  }
+});
+
+// Mark notification as read
+app.post('/api/notifications/:id/read', authenticateToken, async (req, res) => {
+  const { id } = req.params;
+  try {
+    const db = await getDbConnection();
+    await db.run('UPDATE notifications SET is_read = 1 WHERE id = ? AND user_id = ?', [id, req.user.id]);
+    await db.close();
+    res.json({ success: true });
+  } catch (err) {
+    res.status(500).json({ error: 'Error al marcar notificación como leída', details: err.message });
+  }
+});
+
+
+// --- MEMBERSHIPS SCANNERS & WARNINGS (WhatsApp & Panel) ---
+async function scanAndNotifyMemberships() {
+  console.log('🛡️  Ejecutando escaneo automático de membresías...');
+  try {
+    const db = await getDbConnection();
+    
+    // Scan active memberships to check warnings or mark expired
+    const users = await db.all("SELECT id, username, phone, membership_end_date, membership_status FROM users WHERE membership_status = 'active' OR membership_status = 'expired'");
+    
+    // We get current date without time zone issues (local midnights)
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+
+    for (const user of users) {
+      if (!user.membership_end_date) continue;
+      
+      const endDate = new Date(user.membership_end_date);
+      endDate.setHours(0, 0, 0, 0);
+
+      const diffTime = endDate.getTime() - today.getTime();
+      const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
+
+      // 1. If membership expired and it was marked active, update to 'expired'
+      if (diffDays < 0 && user.membership_status === 'active') {
+        await db.run("UPDATE users SET membership_status = 'expired' WHERE id = ?", [user.id]);
+        console.log(`❌ Membresía del guerrero ${user.username} ha expirado el ${user.membership_end_date}.`);
+        continue;
+      }
+
+      // 2. If exactly 3 days left (or between 0 and 3 days left), send warning if not already warned
+      if (diffDays >= 0 && diffDays <= 3) {
+        const notifMsg = `Estimado(a) Guerrero(a) ${user.username}, tu mensualidad de Valhalla Gym vence en ${diffDays === 0 ? 'hoy' : diffDays + ' día(s)'} (${user.membership_end_date}). Evita la interrupción de tu entrenamiento.`;
+        
+        // Avoid duplicate notifications for the same end date
+        const alreadyNotified = await db.get(
+          "SELECT id FROM notifications WHERE user_id = ? AND type = 'expiration_warning' AND message LIKE ?",
+          [user.id, `%${user.membership_end_date}%`]
+        );
+
+        if (!alreadyNotified) {
+          const notifId = `notif-${Date.now()}-${Math.random().toString(36).substr(2, 5)}`;
+          // Create in-app notification
+          await db.run(
+            'INSERT INTO notifications (id, user_id, message, type, date, is_read) VALUES (?, ?, ?, ?, ?, 0)',
+            [notifId, user.id, notifMsg, 'expiration_warning', new Date().toISOString()]
+          );
+          
+          // Send simulated WhatsApp (print to server logs)
+          console.log(`\n--- ENVÍO AUTOMÁTICO WHATSAPP DE EXPIRACIÓN ---`);
+          console.log(`Guerrero: ${user.username}`);
+          console.log(`Teléfono: ${user.phone || 'No registrado'}`);
+          console.log(`Mensaje: ${notifMsg}`);
+          console.log(`-----------------------------------------------\n`);
+        }
+      }
+    }
+    await db.close();
+  } catch (err) {
+    console.error('Error durante escaneo de membresías:', err);
+  }
+}
+
+// Run scanner on startup after 5 seconds
+setTimeout(scanAndNotifyMemberships, 5000);
+// Run scanner every 12 hours
+setInterval(scanAndNotifyMemberships, 12 * 60 * 60 * 1000);
+
 
 // Serve static assets from frontend build
 const __filename = fileURLToPath(import.meta.url);
