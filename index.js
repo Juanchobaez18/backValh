@@ -117,6 +117,32 @@ app.get('/api/auth/me', authenticateToken, async (req, res) => {
   }
 });
 
+// Public Password Reset (Requires Username and Phone match for security)
+app.post('/api/auth/reset', async (req, res) => {
+  const { username, phone, newPassword } = req.body;
+  if (!username || !phone || !newPassword) {
+    return res.status(400).json({ error: 'Debes completar todos los campos de seguridad' });
+  }
+
+  try {
+    const db = await getDbConnection();
+    const user = await db.get('SELECT id FROM users WHERE username = ? AND phone = ?', [username, phone]);
+
+    if (!user) {
+      await db.close();
+      return res.status(400).json({ error: 'Los datos no coinciden con ningún guerrero registrado' });
+    }
+
+    const newHash = bcrypt.hashSync(newPassword, 10);
+    await db.run('UPDATE users SET password_hash = ? WHERE id = ?', [newHash, user.id]);
+    await db.close();
+
+    res.json({ success: true, message: '¡Tu contraseña ha sido restaurada con éxito!' });
+  } catch (err) {
+    res.status(500).json({ error: 'Error al restaurar contraseña', details: err.message });
+  }
+});
+
 // Update Current User Profile (Avatar)
 app.put('/api/auth/me', authenticateToken, async (req, res) => {
   const { avatar } = req.body;
@@ -128,6 +154,32 @@ app.put('/api/auth/me', authenticateToken, async (req, res) => {
     res.json({ user });
   } catch (err) {
     res.status(500).json({ error: 'Error al actualizar perfil', details: err.message });
+  }
+});
+
+// Change Current User Password
+app.put('/api/auth/me/password', authenticateToken, async (req, res) => {
+  const { currentPassword, newPassword } = req.body;
+  if (!currentPassword || !newPassword) {
+    return res.status(400).json({ error: 'Faltan campos requeridos' });
+  }
+  
+  try {
+    const db = await getDbConnection();
+    const user = await db.get('SELECT password_hash FROM users WHERE id = ?', [req.user.id]);
+    
+    if (!user || !bcrypt.compareSync(currentPassword, user.password_hash)) {
+      await db.close();
+      return res.status(400).json({ error: 'La contraseña actual es incorrecta' });
+    }
+    
+    const newHash = bcrypt.hashSync(newPassword, 10);
+    await db.run('UPDATE users SET password_hash = ? WHERE id = ?', [newHash, req.user.id]);
+    await db.close();
+    
+    res.json({ success: true, message: 'Contraseña actualizada correctamente' });
+  } catch (err) {
+    res.status(500).json({ error: 'Error al actualizar contraseña', details: err.message });
   }
 });
 
@@ -222,17 +274,35 @@ app.put('/api/admin/users/:id', requireAdmin, async (req, res) => {
 app.delete('/api/admin/users/:id', requireAdmin, async (req, res) => {
   const { id } = req.params;
   // Prevent deleting the main admin account
-  if (id === 'user-admin') {
-    return res.status(403).json({ error: 'No se puede eliminar la cuenta de administrador principal' });
-  }
+  if (id === '1' || id === 1) return res.status(403).json({ error: 'No se puede eliminar al Administrador principal' });
+  
   try {
     const db = await getDbConnection();
     const result = await db.run('DELETE FROM users WHERE id = ?', [id]);
     await db.close();
     if (result.changes === 0) return res.status(404).json({ error: 'Usuario no encontrado' });
-    res.json({ success: true, message: 'Usuario eliminado' });
+    res.json({ success: true });
   } catch (err) {
     res.status(500).json({ error: 'Error al eliminar usuario', details: err.message });
+  }
+});
+
+// Reset User Password (Admin-only)
+app.post('/api/admin/users/:id/reset-password', requireAdmin, async (req, res) => {
+  const { id } = req.params;
+  try {
+    const defaultPassword = 'valhalla2026';
+    const newHash = bcrypt.hashSync(defaultPassword, 10);
+    
+    const db = await getDbConnection();
+    const result = await db.run('UPDATE users SET password_hash = ? WHERE id = ?', [newHash, id]);
+    await db.close();
+    
+    if (result.changes === 0) return res.status(404).json({ error: 'Usuario no encontrado' });
+    
+    res.json({ success: true, message: `Contraseña restablecida a: ${defaultPassword}` });
+  } catch (err) {
+    res.status(500).json({ error: 'Error al restablecer contraseña', details: err.message });
   }
 });
 
