@@ -20,11 +20,7 @@ Copia `.env.example` a `.env` y configura:
 cp .env.example .env
 ```
 
-| Variable | Descripción | Default |
-|---|---|---|
-| `PORT` | Puerto del servidor | `5000` |
-| `JWT_SECRET` | Clave secreta para JWT | `valhalla_mystic_key_12345` |
-| `CORS_ORIGIN` | Orígenes permitidos (separados por coma) | `http://localhost:5173` |
+
 
 ## Desarrollo Local
 
@@ -48,12 +44,7 @@ npm start
    - `JWT_SECRET` → una clave segura
    - `CORS_ORIGIN` → la URL de tu frontend desplegado (ej: `https://valhalla-gym.vercel.app`)
 
-## Usuarios por defecto
 
-| Usuario | Contraseña | Rol |
-|---|---|---|
-| `admin` | `admin` | Administrador |
-| `ragnar` | `ragnar` | Usuario |
 
 ## Endpoints
 
