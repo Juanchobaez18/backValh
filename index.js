@@ -217,9 +217,16 @@ app.post('/api/admin/users', requireAdmin, async (req, res) => {
     const passwordHash = bcrypt.hashSync(password, 10);
     const assignedRole = role === 'admin' ? 'admin' : 'user';
 
+    let endStr = membership_end_date;
+    if (membership_start_date && !membership_end_date) {
+      const d = new Date(membership_start_date);
+      d.setMonth(d.getMonth() + 1);
+      endStr = d.toISOString().split('T')[0];
+    }
+
     await db.run(
       'INSERT INTO users (id, username, password_hash, role, phone, surgeries, medical_conditions, emergency_contact, birth_date, membership_plan_id, membership_start_date, membership_end_date, membership_status) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
-      [id, username, passwordHash, assignedRole, phone || null, surgeries || null, medical_conditions || null, emergency_contact || null, birth_date || null, membership_plan_id || null, membership_start_date || null, membership_end_date || null, membership_status || 'none']
+      [id, username, passwordHash, assignedRole, phone || null, surgeries || null, medical_conditions || null, emergency_contact || null, birth_date || null, membership_plan_id || null, membership_start_date || null, endStr || null, membership_status || 'none']
     );
 
     await db.close();
@@ -248,14 +255,21 @@ app.put('/api/admin/users/:id', requireAdmin, async (req, res) => {
       return res.status(400).json({ error: 'El nombre de usuario ya está en uso' });
     }
 
+    let endStr = membership_end_date;
+    if (membership_start_date && !membership_end_date) {
+      const d = new Date(membership_start_date);
+      d.setMonth(d.getMonth() + 1);
+      endStr = d.toISOString().split('T')[0];
+    }
+
     const assignedRole = role === 'admin' ? 'admin' : 'user';
     let query = 'UPDATE users SET username = ?, role = ?, phone = ?, surgeries = ?, medical_conditions = ?, emergency_contact = ?, birth_date = ?, membership_plan_id = ?, membership_start_date = ?, membership_end_date = ?, membership_status = ? WHERE id = ?';
-    let params = [username, assignedRole, phone || null, surgeries || null, medical_conditions || null, emergency_contact || null, birth_date || null, membership_plan_id || null, membership_start_date || null, membership_end_date || null, membership_status || 'none', id];
+    let params = [username, assignedRole, phone || null, surgeries || null, medical_conditions || null, emergency_contact || null, birth_date || null, membership_plan_id || null, membership_start_date || null, endStr || null, membership_status || 'none', id];
 
     if (password && password.trim() !== '') {
       const passwordHash = bcrypt.hashSync(password, 10);
       query = 'UPDATE users SET username = ?, password_hash = ?, role = ?, phone = ?, surgeries = ?, medical_conditions = ?, emergency_contact = ?, birth_date = ?, membership_plan_id = ?, membership_start_date = ?, membership_end_date = ?, membership_status = ? WHERE id = ?';
-      params = [username, passwordHash, assignedRole, phone || null, surgeries || null, medical_conditions || null, emergency_contact || null, birth_date || null, membership_plan_id || null, membership_start_date || null, membership_end_date || null, membership_status || 'none', id];
+      params = [username, passwordHash, assignedRole, phone || null, surgeries || null, medical_conditions || null, emergency_contact || null, birth_date || null, membership_plan_id || null, membership_start_date || null, endStr || null, membership_status || 'none', id];
     }
 
     const result = await db.run(query, params);
@@ -803,10 +817,10 @@ app.post('/api/admin/payments', requireAdmin, async (req, res) => {
     const db = await getDbConnection();
     const id = `pay-${Date.now()}`;
     
-    // Calculate membership end date (+30 days from payment_date)
+    // Calculate membership end date (+1 exact month from payment_date to keep the same day of the month)
     const start = new Date(payment_date);
-    const end = new Date(start.getTime() + (30 * 24 * 60 * 60 * 1000));
-    const endStr = end.toISOString().split('T')[0];
+    start.setMonth(start.getMonth() + 1);
+    const endStr = start.toISOString().split('T')[0];
 
     // Insert payment record
     await db.run(
@@ -814,10 +828,10 @@ app.post('/api/admin/payments', requireAdmin, async (req, res) => {
       [id, user_id, username, plan_id || null, plan_name || 'Membresía', parseFloat(amount), payment_date, notes || '']
     );
 
-    // Update user membership details
+    // Update user membership details (extend end date but DO NOT overwrite original start date)
     await db.run(
-      'UPDATE users SET membership_plan_id = ?, membership_start_date = ?, membership_end_date = ?, membership_status = ? WHERE id = ?',
-      [plan_id || null, payment_date, endStr, 'active', user_id]
+      'UPDATE users SET membership_plan_id = ?, membership_end_date = ?, membership_status = ? WHERE id = ?',
+      [plan_id || null, endStr, 'active', user_id]
     );
 
     await db.close();
